@@ -1,0 +1,21 @@
+{
+  "name": "Tricking Server Discord Bot",
+  "version": "1.1.0",
+  "description": "Tricking Server Discord Bot for discord.gg/BK9G93Z",
+  "main": "bot.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "none"
+  },
+  "keywords": [
+    "none"
+  ],
+  "author": "joshua-dweber",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "discord.js": "^12.4.1"
+  }
+}
