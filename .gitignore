@@ -3,3 +3,6 @@ node_modules
 testbot copy.js
 messagesSaved.json
 nodemon.json
+battles.json
+samplers.json
+messages.json

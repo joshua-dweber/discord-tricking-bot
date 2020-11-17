@@ -2,6 +2,7 @@ const Discord = require("discord.js");
 const fs = require ("fs");
 const client = new Discord.Client({ partials: ['MESSAGE', 'REACTION'] });
 const config = require('./config.json');
+var CronJob = require('cron').CronJob;
 
 client.on("ready", () => {
   console.log("Test Bot Online");
@@ -91,38 +92,45 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
         Object.keys(config.ranksampler_reactions).forEach(async key => await msg.react(key));
         samplers[msg.id] = { "createdAt": createdTimestamp, "userId": author.id };
         fs.writeFileSync('samplers.json', JSON.stringify(samplers));
+        const job = new CronJob(new Date(Date.now() + 10000), () => {
+          samplerLogic(msg.id, guild);
+        }).start();
       });
   }
   Object.keys(samplers).forEach(sampId => {
-    if((Date.now() - samplers[sampId.createdAt]) / 86400000 > 1) {
-    sampChannel = guild.channels.cache.get(config.ranksampler_channel);
-      sampChannel.messages.fetch(sampId)
-        .then(({reactions}) => {
-          let maxCount = 0, maxEmoji = "";
-          //looping through the reactions backwards and checking which one has the greatest count (backwards because we want to give the lowest role if a tie)
-          reactions.cache.array().reverse().forEach(reaction => {
-            if(reaction.count > maxCount) {
-              maxCount = reaction.count;
-              maxEmoji = reaction.emoji.name;
-            }
-          });
-          //basically just fetches the user from the json file and gives them the role from the config
-          guild.members.fetch(samplers[sampId].userId).then(guildMember => guild.roles.fetch(config.ranksampler_reactions[maxEmoji]).then(role => guildMember.roles.add(role)));
-          reactions.cache.array().forEach(reaction => {
-            if(reaction.emoji.name != maxEmoji) {
-              guild.members.fetch(samplers[sampId].userId).then(guildMember => {
-                if(guildMember.roles.cache.has(config.ranksampler_reactions[reaction.emoji.name]))
-                  guild.roles.fetch(config.ranksampler_reactions[reaction.emoji.name]).then(role => guildMember.roles.remove(role));
-              });
-            }
-          });
-          sampChannel.send(`Voting for <@${samplers[sampId].userId}>'s sampler has ended`)
-          delete samplers[sampId];
-          fs.writeFileSync('samplers.json', JSON.stringify(samplers));
-        })
-        .catch(console.error);
-    }
+    if((Date.now() - samplers[sampId.createdAt]) / 86400000 > 1)
+      samplerLogic(sampId, guild);
   });
+
+  function samplerLogic(id, guild) {
+    let samplers = JSON.parse(fs.readFileSync('samplers.json'));
+    sampChannel = guild.channels.cache.get(config.ranksampler_channel);
+    sampChannel.messages.fetch(id)
+      .then(({ reactions }) => {
+        let maxCount = 0, maxEmoji = "";
+        //looping through the reactions backwards and checking which one has the greatest count (backwards because we want to give the lowest role if a tie)
+        reactions.cache.array().reverse().forEach(reaction => {
+          if (reaction.count > maxCount) {
+            maxCount = reaction.count;
+            maxEmoji = reaction.emoji.name;
+          }
+        });
+        //basically just fetches the user from the json file and gives them the role from the config
+        guild.members.fetch(samplers[id].userId).then(guildMember => guild.roles.fetch(config.ranksampler_reactions[maxEmoji]).then(role => guildMember.roles.add(role)));
+        reactions.cache.array().forEach(reaction => {
+          if (reaction.emoji.name != maxEmoji) {
+            guild.members.fetch(samplers[id].userId).then(guildMember => {
+              if (guildMember.roles.cache.has(config.ranksampler_reactions[reaction.emoji.name]))
+                guild.roles.fetch(config.ranksampler_reactions[reaction.emoji.name]).then(role => guildMember.roles.remove(role));
+            });
+          }
+        });
+        sampChannel.send(`Voting for <@${samplers[id].userId}>'s sampler has ended`)
+        delete samplers[id];
+        fs.writeFileSync('samplers.json', JSON.stringify(samplers));
+      })
+      .catch(console.error);
+  }
 
   //message counting stuff
   let messages = JSON.parse(fs.readFileSync('messages.json'));
