@@ -1,6 +1,11 @@
-const Discord = require("discord.js");
-const fs = require ("fs");
-const client = new Discord.Client({ partials: ['MESSAGE', 'REACTION'] });
+const { Client, Intents } = require("discord.js");
+const fs = require("fs");
+const client = new Client({
+  partials: ['MESSAGE', 'REACTION'], ws: new Intents([
+    Intents.NON_PRIVILEGED,
+    "GUILD_MEMBERS",
+  ])
+});
 const config = require('./config.json');
 var CronJob = require('cron').CronJob;
 
