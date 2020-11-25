@@ -6,7 +6,7 @@ var CronJob = require('cron').CronJob;
 
 client.on("ready", () => {
   console.log("Test Bot Online");
-  battleChannel = client.channels.cache.get("744770197079982080");
+  battleChannel = client.channels.cache.get(config.battle_channel);
   client.user.setPresence({activity: { name: "Hopefully Getting Better" } });
 });
 
@@ -21,10 +21,9 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
 
   if (content.startsWith("!battle")) {
     let battles = JSON.parse(fs.readFileSync('battles.json'));
-    // battles.battles[battles.idCount] = {"timeStart": Date.now(), "users": [{ "id": author.id, "submission": "", "opponent": "", "stage": 0, "voteMessageId": "" }]};
     battles.battles[battles.idCount] = {"users": {}, "currentVoting": {}};
     battles.battles[battles.idCount].users[author.id] = {"submission": "", "opponent": ""};
-    battleChannel.send(`@ everyone <@${author.id}> has started a battle, type \`!enter ${battles.idCount}\` to join! (1/4). It will start when 3 more people join. **DO NOT JOIN A BATTLE THAT YOU KNOW YOU WILL WIN**. Only join battles where you are around or lower than the skill level of the person who started and the people who have joined.`);
+    battleChannel.send(`@everyone <@${author.id}> has started a battle, type \`!enter ${battles.idCount}\` to join! (1/4). It will start when 3 more people join. **DO NOT JOIN A BATTLE THAT YOU KNOW YOU WILL WIN**. Only join battles where you are around or lower than the skill level of the person who started and the people who have joined.`);
     battles.idCount++;
     fs.writeFileSync('battles.json', JSON.stringify(battles));
   }
@@ -43,7 +42,8 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
       channel.send("you have successfully joined the battle");
       battleChannel.send(`<@${author.id}> has joined battle ${battleId} (${Object.keys(battle.users).length}/4)`)
       fs.writeFileSync('battles.json', JSON.stringify(battles));
-      battleLogic(battleId);
+      if (Object.keys(battle.users).length >= 4)
+        battleLogic(battleId);
     } else battleChannel.send("no such battle exists");
 
   }
@@ -57,13 +57,13 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
         battle.users[author.id].submission = content.split(' ')[2];
         channel.send("submission added");
         if(battle.users[battle.users[author.id].opponent].submission != "") {
-          battleChannel.send(`@ here <@${author.id}>: ${battle.users[author.id].submission}\n<@${battle.users[author.id].opponent}>: ${battle.users[battle.users[author.id].opponent].submission}\nVote 🔵 for <@${author.id}> and 🔴 for <@${battle.users[author.id].opponent}> voting will end in 8 hours`).then(async message => {
+          battleChannel.send(`@here <@${author.id}>: ${battle.users[author.id].submission}\n<@${battle.users[author.id].opponent}>: ${battle.users[battle.users[author.id].opponent].submission}\nVote 🔵 for <@${author.id}> and 🔴 for <@${battle.users[author.id].opponent}> voting will end in 8 hours`).then(async message => {
             await message.react("🔵");
             await message.react("🔴");
             battle.currentVoting[message.id] = {"startedAt": Date.now(), users: [author.id, battle.users[author.id].opponent]};
             fs.writeFileSync('battles.json', JSON.stringify(battles));
             //28800000
-            new CronJob(new Date(Date.now() + 10000), () => {
+            new CronJob(new Date(Date.now() + 360000), () => {
               battleVote(message.id, battleId)
             }).start();
           });
@@ -75,14 +75,17 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
 
   Object.keys(battles.battles).forEach(battle => {
     Object.keys(battles.battles[battle].currentVoting).forEach(voteKey => {
-      if (Date.now() - battles.battles[battle].currentVoting[voteKey].startedAt / 28800000 > 1)
-        battleLogic(voteKey, battle);
+      if ((Date.now() - battles.battles[battle].currentVoting[voteKey].startedAt) / 3600000 > 1) {
+        console.log("not cronjob");
+        console.log(Date.now())
+        battleVote(voteKey, battle);
+      }
     })
   });
 
   function battleLogic(id, stage=1) {
+    let battles = JSON.parse(fs.readFileSync('battles.json'));
     if(stage == 1) {
-      let battles = JSON.parse(fs.readFileSync('battles.json'));
       let battle = battles.battles[id];
       let users = Object.keys(battle.users);
       for (let i = 0; i < users.length; i++) {
@@ -90,9 +93,7 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
       }
       battleChannel.send(`Battle ${id} has started. \n<@${users[0]}> vs <@${users[1]}>\n<@${users[2]}> vs <@${users[3]}>`);
       battleChannel.send(`Submit your clips by doing \`!submit ${id} <url>\`. The best way to submit a clip is to upload it in a different channel (#tricking-clips or #trickathome) and then right click -> copy link and use that as the url because discord will auto format it.`);
-      fs.writeFileSync('battles.json', JSON.stringify(battles));
     } else if (stage == 2) {
-      let battles = JSON.parse(fs.readFileSync('battles.json'));
       let battle = battles.battles[id];
       let users = Object.keys(battle.users);
       console.log(users);
@@ -101,46 +102,45 @@ client.on("message", ({author, member, guild, content, channel, id, createdTimes
       }
       battleChannel.send(`Battle ${id} finals has started. \n<@${users[0]}> vs <@${users[1]}>`);
       battleChannel.send(`Submit your clips by doing \`!submit ${id} <url>\``);
-      fs.writeFileSync('battles.json', JSON.stringify(battles));
     } else if (stage == 3) {
-      let battles = JSON.parse(fs.readFileSync('battles.json'));
       let battle = battles.battles[id];
       let user = Object.keys(battle.users)[0];
       battleChannel.send(`<@${user}> has won battle ${id}!`);
       delete battles.battles[id];
-      fs.writeFileSync('battles.json', JSON.stringify(battles));
     }
+    fs.writeFileSync('battles.json', JSON.stringify(battles));
   }
   
   function battleVote(msgId, battleId) {
     let battles = JSON.parse(fs.readFileSync('battles.json'));
+    let battle = battles.battles[battleId];
     battleChannel.messages.fetch(msgId).then(msg => {
       console.log(msg.reactions.cache.array())
       let userId = msg.reactions.cache.array()[0].count > msg.reactions.cache.array()[1].count ? battle.currentVoting[msg.id].users[0] : battle.currentVoting[msg.id].users[1];
+      battleChannel.send(`<@${userId}> has beaten <@${battle.users[userId].opponent}>`)
       battle.users[userId].submission = "";
       delete battle.users[battle.users[userId].opponent];
       battle.users[userId].opponent = "";
       delete battle.currentVoting[msgId];
-      battleChannel.send(`<@${userId} has beaten ${battle.users[userId].opponent}`)
       fs.writeFileSync('battles.json', JSON.stringify(battles));
       if (Object.keys(battle.users).length == 2) {
         battleLogic(battleId, 2);
       } else if (Object.keys(battle.users).length == 1) {
         battleLogic(battleId, 3);
       }
-    });
+    }).catch(console.error);
   }
 
   //sampler stuff
   let samplers = JSON.parse(fs.readFileSync('samplers.json'));
   if (content.startsWith("!ranksampler")) {
     //sending the message which shows who the sampler is for, and shows the url that the user passed in. It then loops through all the reactions in the config and adds them.
-    guild.channels.cache.get(config.ranksampler_channel).send(`@ everyone React to this message to choose what rank this sampler by <@${author.id}> deserves! The rank will be given after 24 hours.${config.ranksampler_msg}${content.split(' ')[1]}`)
+    guild.channels.cache.get(config.ranksampler_channel).send(`@everyone React to this message to choose what rank this sampler by <@${author.id}> deserves! The rank will be given after 24 hours.${config.ranksampler_msg}${content.split(' ')[1]}`)
       .then(msg => {
         Object.keys(config.ranksampler_reactions).forEach(async key => await msg.react(key));
         samplers[msg.id] = { "createdAt": createdTimestamp, "userId": author.id };
         fs.writeFileSync('samplers.json', JSON.stringify(samplers));
-        new CronJob(new Date(Date.now() + 60000), () => {
+        new CronJob(new Date(Date.now() + 86400000), () => {
           samplerLogic(msg.id, guild);
         }).start();
       });
